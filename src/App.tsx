@@ -77,7 +77,11 @@ function App() {
     e.preventDefault();
     if(!inputMessage.trim()|| isTyping) return;
 
-    
+    //validate message length
+    if (inputMessage.length > MAX_MESSAGES) {
+      setError(`Message cannot exceed ${MAX_MESSAGES} characters`);
+      return;
+    }
       
     
 
