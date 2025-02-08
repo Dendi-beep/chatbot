@@ -66,7 +66,8 @@ function App() {
       }
 
       // Return the response from the API
-      return data.result || data.message || "I apologize, but I couldn't process your request properly.";
+      return data.response || "Fallback message if response is missing.";
+
     } catch (error) {
       console.error('API Error:', error);
       throw error;
