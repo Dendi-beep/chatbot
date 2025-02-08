@@ -10,7 +10,7 @@ interface Message {
 }
 
 const MAX_MESSAGE_LENGTH = 1000; // Maximum characters allowed per message
-const API_ENDPOINT = 'YOUR_API_ENDPOINT'; // Replace with your actual API endpoint
+const API_ENDPOINT = 'https://api.ryzendesu.vip/api/ai/v2/chatgpt'; // Your provided API endpoint
 
 function App() {
   const [messages, setMessages] = useState<Message[]>([
@@ -46,23 +46,27 @@ function App() {
 
   const sendMessageToAPI = async (text: string) => {
     try {
-      const response = await fetch(API_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text: text,
-          prompt: 'chat', // Adjust based on your API requirements
-        }),
+      // Using URLSearchParams to properly encode the parameters
+      const params = new URLSearchParams({
+        text: text,
+        prompt: 'chat' // Default prompt value, can be adjusted as needed
       });
+
+      const response = await fetch(`${API_ENDPOINT}?${params.toString()}`);
 
       if (!response.ok) {
         throw new Error(`API Error: ${response.statusText}`);
       }
 
       const data = await response.json();
-      return data.response; // Adjust based on your API response structure
+      
+      // Check if the API response contains an error
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      // Return the response from the API
+      return data.result || data.message || "I apologize, but I couldn't process your request properly.";
     } catch (error) {
       console.error('API Error:', error);
       throw error;
