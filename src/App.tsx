@@ -49,7 +49,7 @@ function App() {
       // Using URLSearchParams to properly encode the parameters
       const params = new URLSearchParams({
         text: text,
-        prompt: 'chat' // Default prompt value, can be adjusted as needed
+        prompt: 'text-davinci-003' // Default prompt value, can be adjusted as needed
       });
 
       const response = await fetch(`${API_ENDPOINT}?${params.toString()}`);
