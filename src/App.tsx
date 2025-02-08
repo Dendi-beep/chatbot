@@ -82,6 +82,15 @@ function App() {
       setError(`Message cannot exceed ${MAX_MESSAGES} characters`);
       return;
     }
+
+
+    //Add user message
+    const userMessage: Message = {
+      id: message.length + 1,
+      text: inputMessage,
+      sender: 'user',
+      timestamp: new Date(),
+    }
       
     
 
