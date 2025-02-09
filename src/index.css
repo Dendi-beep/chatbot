@@ -50,19 +50,19 @@ html {
 }
 
 .prose pre {
-  @apply my-2;
+  @apply my-4;
 }
 
 .prose ul {
-  @apply my-2;
+  @apply my-4 ml-1;
 }
 
 .prose ol {
-  @apply my-2;
+  @apply my-4 ml-1;
 }
 
 .prose p {
-  @apply my-2;
+  @apply my-4 leading-7;
 }
 
 .prose h1,
@@ -71,7 +71,7 @@ html {
 .prose h4,
 .prose h5,
 .prose h6 {
-  @apply font-bold my-3;
+  @apply font-bold my-6 first:mt-0;
 }
 
 .prose h1 {
@@ -87,7 +87,7 @@ html {
 }
 
 .prose table {
-  @apply w-full my-3 text-left border-collapse;
+  @apply w-full my-4 text-left border-collapse;
 }
 
 .prose th,
@@ -100,12 +100,12 @@ html {
 }
 
 .prose blockquote {
-  @apply border-l-4 border-gray-200 pl-4 my-3 italic;
+  @apply border-l-4 border-gray-200 pl-4 my-4 italic;
 }
 
 /* Dark mode adjustments for user messages */
 .prose-invert code {
-  @apply bg-blue-600 text-white;
+  @apply bg-blue-600/80 text-white;
 }
 
 .prose-invert a {
@@ -113,5 +113,18 @@ html {
 }
 
 .prose-invert blockquote {
-  @apply border-l-4 border-blue-400;
+  @apply border-l-4 border-blue-400/50;
+}
+
+/* Message spacing */
+.message-content {
+  @apply space-y-2;
+}
+
+.message-content > *:first-child {
+  @apply mt-0;
+}
+
+.message-content > *:last-child {
+  @apply mb-0;
 }
