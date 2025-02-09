@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, AlertCircle } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface Message {
   id: number;
@@ -9,14 +11,14 @@ interface Message {
   error?: boolean;
 }
 
-const MAX_MESSAGE_LENGTH = 1000; // Maximum characters allowed per message
-const API_ENDPOINT = 'https://api.ryzendesu.vip/api/ai/v2/chatgpt'; // Your provided API endpoint
+const MAX_MESSAGE_LENGTH = 1000;
+const API_ENDPOINT = 'https://api.ryzendesu.vip/api/ai/v2/chatgpt';
 
 function App() {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 1,
-      text: "Hello! I'm your AI assistant. How can I help you today? 👋",
+      text: "Hello! I'm your AI assistant. How can I help you today? 👋\n\nI can help you with:\n- Answering questions\n- Writing code\n- Explaining concepts\n- And much more!",
       sender: 'bot',
       timestamp: new Date()
     }
@@ -46,10 +48,9 @@ function App() {
 
   const sendMessageToAPI = async (text: string) => {
     try {
-      // Using URLSearchParams to properly encode the parameters
       const params = new URLSearchParams({
         text: text,
-        prompt: '' // Default prompt value, can be adjusted as needed
+        prompt: 'chat'
       });
 
       const response = await fetch(`${API_ENDPOINT}?${params.toString()}`);
@@ -60,14 +61,11 @@ function App() {
 
       const data = await response.json();
       
-      // Check if the API response contains an error
       if (data.error) {
         throw new Error(data.error);
       }
 
-      // Return the response from the API
-      return data.response || "Fallback message if response is missing.";
-
+      return data.response|| "I apologize, but I couldn't process your request properly.";
     } catch (error) {
       console.error('API Error:', error);
       throw error;
@@ -78,13 +76,11 @@ function App() {
     e.preventDefault();
     if (!inputMessage.trim() || isTyping) return;
 
-    // Validate message length
     if (inputMessage.length > MAX_MESSAGE_LENGTH) {
       setError(`Message cannot exceed ${MAX_MESSAGE_LENGTH} characters`);
       return;
     }
 
-    // Add user message
     const userMessage: Message = {
       id: messages.length + 1,
       text: inputMessage,
@@ -98,7 +94,6 @@ function App() {
     setError(null);
 
     try {
-      // Call API
       const botResponse = await sendMessageToAPI(inputMessage);
       
       setMessages(prev => [...prev, {
@@ -108,7 +103,6 @@ function App() {
         timestamp: new Date()
       }]);
     } catch (error) {
-      // Add error message
       setMessages(prev => [...prev, {
         id: prev.length + 1,
         text: "I apologize, but I encountered an error processing your request. Please try again later.",
@@ -126,6 +120,61 @@ function App() {
   };
 
   const isOverCharacterLimit = inputMessage.length > MAX_MESSAGE_LENGTH;
+
+  // Custom components for markdown rendering
+  const MarkdownComponents = {
+    // Style for code blocks
+    code({ node, inline, className, children, ...props }: any) {
+      return (
+        <code
+          className={`${className} ${
+            inline
+              ? 'bg-gray-100 text-sm px-1 py-0.5 rounded'
+              : 'block bg-gray-100 p-3 rounded-lg text-sm overflow-x-auto'
+          }`}
+          {...props}
+        >
+          {children}
+        </code>
+      );
+    },
+    // Style for links
+    a({ node, children, ...props }: any) {
+      return (
+        <a
+          className="text-blue-500 hover:text-blue-600 underline"
+          target="_blank"
+          rel="noopener noreferrer"
+          {...props}
+        >
+          {children}
+        </a>
+      );
+    },
+    // Style for paragraphs
+    p({ node, children, ...props }: any) {
+      return (
+        <p className="mb-2 last:mb-0" {...props}>
+          {children}
+        </p>
+      );
+    },
+    // Style for lists
+    ul({ node, children, ...props }: any) {
+      return (
+        <ul className="list-disc list-inside mb-2 space-y-1" {...props}>
+          {children}
+        </ul>
+      );
+    },
+    ol({ node, children, ...props }: any) {
+      return (
+        <ol className="list-decimal list-inside mb-2 space-y-1" {...props}>
+          {children}
+        </ol>
+      );
+    }
+  };
 
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
@@ -183,7 +232,16 @@ function App() {
                       <span className="text-xs font-medium text-red-500">Error</span>
                     </div>
                   )}
-                  <p className="text-sm leading-relaxed">{message.text}</p>
+                  <div className={`prose prose-sm max-w-none ${
+                    message.sender === 'user' ? 'text-white prose-invert' : 'text-gray-800'
+                  }`}>
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={MarkdownComponents}
+                    >
+                      {message.text}
+                    </ReactMarkdown>
+                  </div>
                 </div>
                 <span className="text-xs text-gray-400 mt-2 mx-2">
                   {message.timestamp.toLocaleTimeString([], { 
