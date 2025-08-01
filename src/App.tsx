@@ -3,6 +3,7 @@ import { Send, Bot, User, Sparkles, AlertCircle, Plus } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import OpenAI from "openai";
+
 interface Message {
   id: number;
   text: string;
@@ -35,7 +36,6 @@ function App() {
     },
   ]);
   const [activeSessionId, setActiveSessionId] = useState("default");
-
   const [inputMessage, setInputMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,13 +43,33 @@ function App() {
 
   const activeSession = sessions.find((s) => s.id === activeSessionId)!;
 
+  const client = new OpenAI({
+    apiKey: import.meta.env.VITE_OPENROUTER_API_KEY,
+    baseURL: "https://openrouter.ai/api/v1",
+    dangerouslyAllowBrowser: true, // untuk FE only
+  });
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  // Load sessions from localStorage saat app start
   useEffect(() => {
-    scrollToBottom();
-  }, [activeSession.messages]);
+    const saved = localStorage.getItem("chat-sessions");
+    if (saved) {
+      setSessions(
+        JSON.parse(saved, (key, value) => {
+          if (key === "timestamp") return new Date(value);
+          return value;
+        })
+      );
+    }
+  }, []);
+
+  // Simpan sessions ke localStorage setiap kali berubah
+  useEffect(() => {
+    localStorage.setItem("chat-sessions", JSON.stringify(sessions));
+  }, [sessions]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const text = e.target.value;
@@ -61,19 +81,25 @@ function App() {
     }
   };
 
-  const client = new OpenAI({
-    apiKey: import.meta.env.VITE_OPENROUTER_API_KEY,
-    baseURL: "https://openrouter.ai/api/v1",
-    dangerouslyAllowBrowser: true,
-  });
+  // Kirim ke API + seluruh history biar AI ingat konteks
+  const sendMessageToAPI = async (text: string) => {
+    const messagesToSend = activeSession.messages.map((m) => ({
+      role: m.sender === "user" ? "user" : "assistant",
+      content: m.text,
+    }));
 
-  async function sendMessageToAPI(text: string) {
+    // tambahkan pesan terbaru user
+    messagesToSend.push({ role: "user", content: text });
+
     const res = await client.chat.completions.create({
       model: "deepseek/deepseek-chat-v3-0324:free",
-      messages: [{ role: "user", content: text }],
+      messages: messagesToSend,
     });
-    return res.choices[0].message.content;
-  }
+
+    return (
+      res.choices[0].message?.content || "I couldn't process your request."
+    );
+  };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,6 +112,7 @@ function App() {
       timestamp: new Date(),
     };
 
+    // update session dengan pesan user
     setSessions((prev) =>
       prev.map((s) =>
         s.id === activeSessionId
