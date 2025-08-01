@@ -28,7 +28,7 @@ function App() {
       messages: [
         {
           id: 1,
-          text: "Hello! I'm your AI assistant. How can I help you today? 👋",
+          text: "Hallo ! Saya Chatbot. Apa yang bisa saya bantu 👋",
           sender: "bot",
           timestamp: new Date(),
         },
@@ -83,13 +83,22 @@ function App() {
 
   // Kirim ke API + seluruh history biar AI ingat konteks
   const sendMessageToAPI = async (text: string) => {
-    const messagesToSend = activeSession.messages.map((m) => ({
-      role: m.sender === "user" ? "user" : "assistant",
-      content: m.text,
-    }));
-
-    // tambahkan pesan terbaru user
-    messagesToSend.push({ role: "user", content: text });
+    // Ambil semua pesan sebelumnya sebagai context
+    const messagesToSend = [
+      {
+        role: "system",
+        content:
+          "Kamu adalah AI asisten di website ini. " +
+          "Jika pengguna bertanya tentang website atau tentang AI ini, " +
+          "jawablah bahwa website ini menggunakan model seperti GPT-4 " +
+          "dan dikembangkan oleh Dendi Ananda Putra.",
+      },
+      ...activeSession.messages.map((m) => ({
+        role: m.sender === "user" ? "user" : "assistant",
+        content: m.text,
+      })),
+      { role: "user", content: text },
+    ];
 
     const res = await client.chat.completions.create({
       model: "deepseek/deepseek-chat-v3-0324:free",
@@ -112,13 +121,23 @@ function App() {
       timestamp: new Date(),
     };
 
-    // update session dengan pesan user
     setSessions((prev) =>
-      prev.map((s) =>
-        s.id === activeSessionId
-          ? { ...s, messages: [...s.messages, newMessage] }
-          : s
-      )
+      prev.map((s) => {
+        if (s.id === activeSessionId) {
+          const updatedMessages = [...s.messages, newMessage];
+          return {
+            ...s,
+            messages: updatedMessages,
+            // Update title kalau ini pesan user pertama
+            title:
+              s.messages.filter((m) => m.sender === "user").length === 0
+                ? inputMessage.slice(0, 20) +
+                  (inputMessage.length > 20 ? "..." : "")
+                : s.title,
+          };
+        }
+        return s;
+      })
     );
 
     setInputMessage("");
