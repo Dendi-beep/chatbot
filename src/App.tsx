@@ -1,40 +1,55 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Sparkles, AlertCircle } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import React, { useState, useRef, useEffect } from "react";
+import { Send, Bot, User, Sparkles, AlertCircle, Plus } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface Message {
   id: number;
   text: string;
-  sender: 'bot' | 'user';
+  sender: "bot" | "user";
   timestamp: Date;
   error?: boolean;
 }
 
+interface Session {
+  id: string;
+  title: string;
+  messages: Message[];
+}
+
 const MAX_MESSAGE_LENGTH = 1000;
-const API_ENDPOINT = 'https://api.ryzendesu.vip/api/ai/v2/chatgpt';
 
 function App() {
-  const [messages, setMessages] = useState<Message[]>([
+  const [sessions, setSessions] = useState<Session[]>([
     {
-      id: 1,
-      text: "Hello! I'm your AI assistant. How can I help you today? 👋\n\nI can help you with:\n- Answering questions\n- Writing code\n- Explaining concepts\n- And much more!",
-      sender: 'bot',
-      timestamp: new Date()
-    }
+      id: "default",
+      title: "New Chat",
+      messages: [
+        {
+          id: 1,
+          text: "Hello! I'm your AI assistant. How can I help you today? 👋",
+          sender: "bot",
+          timestamp: new Date(),
+        },
+      ],
+    },
   ]);
-  const [inputMessage, setInputMessage] = useState('');
+  const [activeSessionId, setActiveSessionId] = useState("default");
+
+  const [inputMessage, setInputMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const activeSession = sessions.find((s) => s.id === activeSessionId)!;
+
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [activeSession.messages]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const text = e.target.value;
@@ -47,274 +62,300 @@ function App() {
   };
 
   const sendMessageToAPI = async (text: string) => {
-    try {
-      const params = new URLSearchParams({
-        text: text,
-        prompt: 'chat'
-      });
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "deepseek/deepseek-chat-v3-0324",
+        messages: [{ role: "user", content: text }],
+      }),
+    });
 
-      const response = await fetch(`${API_ENDPOINT}?${params.toString()}`);
-
-      if (!response.ok) {
-        throw new Error(`API Error: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      return data.response|| "I apologize, but I couldn't process your request properly.";
-    } catch (error) {
-      console.error('API Error:', error);
-      throw error;
-    }
+    if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
+    const data = await response.json();
+    return (
+      data.choices?.[0]?.message?.content || "I couldn't process your request."
+    );
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputMessage.trim() || isTyping) return;
 
-    if (inputMessage.length > MAX_MESSAGE_LENGTH) {
-      setError(`Message cannot exceed ${MAX_MESSAGE_LENGTH} characters`);
-      return;
-    }
-
-    const userMessage: Message = {
-      id: messages.length + 1,
+    const newMessage: Message = {
+      id: activeSession.messages.length + 1,
       text: inputMessage,
-      sender: 'user',
-      timestamp: new Date()
+      sender: "user",
+      timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
-    setInputMessage('');
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === activeSessionId
+          ? { ...s, messages: [...s.messages, newMessage] }
+          : s
+      )
+    );
+
+    setInputMessage("");
     setIsTyping(true);
     setError(null);
 
     try {
-      const botResponse = await sendMessageToAPI(inputMessage);
-      
-      setMessages(prev => [...prev, {
-        id: prev.length + 1,
-        text: botResponse,
-        sender: 'bot',
-        timestamp: new Date()
-      }]);
-    } catch (error) {
-      setMessages(prev => [...prev, {
-        id: prev.length + 1,
-        text: "I apologize, but I encountered an error processing your request. Please try again later.",
-        sender: 'bot',
+      const botReply = await sendMessageToAPI(inputMessage);
+
+      const botMessage: Message = {
+        id: newMessage.id + 1,
+        text: botReply,
+        sender: "bot",
         timestamp: new Date(),
-        error: true
-      }]);
+      };
+
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === activeSessionId
+            ? { ...s, messages: [...s.messages, botMessage] }
+            : s
+        )
+      );
+    } catch {
+      const errorMessage: Message = {
+        id: newMessage.id + 1,
+        text: "I encountered an error. Please try again later.",
+        sender: "bot",
+        timestamp: new Date(),
+        error: true,
+      };
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === activeSessionId
+            ? { ...s, messages: [...s.messages, errorMessage] }
+            : s
+        )
+      );
     } finally {
       setIsTyping(false);
     }
   };
 
-  const getCharacterCount = () => {
-    return `${inputMessage.length}/${MAX_MESSAGE_LENGTH}`;
+  const createNewSession = () => {
+    const newId = Date.now().toString();
+    const newSession: Session = {
+      id: newId,
+      title: "New Chat",
+      messages: [
+        {
+          id: 1,
+          text: "Hello! I'm your AI assistant. How can I help you today? 👋",
+          sender: "bot",
+          timestamp: new Date(),
+        },
+      ],
+    };
+    setSessions((prev) => [...prev, newSession]);
+    setActiveSessionId(newId);
   };
 
-  const isOverCharacterLimit = inputMessage.length > MAX_MESSAGE_LENGTH;
-
-  // Custom components for markdown rendering
   const MarkdownComponents = {
-    // Style for code blocks
-    code({ node, inline, className, children, ...props }: any) {
-      return (
-        <code
-          className={`${className} ${
-            inline
-              ? 'bg-gray-100 text-sm px-1 py-0.5 rounded'
-              : 'block bg-gray-100 p-3 rounded-lg text-sm overflow-x-auto'
-          }`}
-          {...props}
-        >
+    code({ inline, className, children, ...props }: any) {
+      return inline ? (
+        <code className="bg-gray-100 text-sm px-1 py-0.5 rounded">
           {children}
         </code>
+      ) : (
+        <pre className="bg-gray-900 text-green-200 p-3 rounded-lg overflow-x-auto text-sm whitespace-pre-wrap">
+          <code {...props}>{children}</code>
+        </pre>
       );
     },
-    // Style for links
-    a({ node, children, ...props }: any) {
-      return (
-        <a
-          className="text-blue-500 hover:text-blue-600 underline"
-          target="_blank"
-          rel="noopener noreferrer"
-          {...props}
-        >
-          {children}
-        </a>
-      );
+    p({ children }: any) {
+      return <p className="mb-2 whitespace-pre-wrap">{children}</p>;
     },
-    // Style for paragraphs
-    p({ node, children, ...props }: any) {
-      return (
-        <p className="mb-2 last:mb-0" {...props}>
-          {children}
-        </p>
-      );
-    },
-    // Style for lists
-    ul({ node, children, ...props }: any) {
-      return (
-        <ul className="list-disc list-inside mb-2 space-y-1" {...props}>
-          {children}
-        </ul>
-      );
-    },
-    ol({ node, children, ...props }: any) {
-      return (
-        <ol className="list-decimal list-inside mb-2 space-y-1" {...props}>
-          {children}
-        </ol>
-      );
-    }
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
-      {/* Header */}
-      <header className="bg-white/80 backdrop-blur-lg border-b border-blue-100 px-6 py-4 sticky top-0 z-10">
-        <div className="max-w-3xl mx-auto">
+    <div className="flex h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
+      {/* Sidebar */}
+      <aside className="w-64 bg-white/80 backdrop-blur-lg border-r border-blue-100 flex flex-col">
+        <button
+          onClick={createNewSession}
+          className="m-4 bg-gradient-to-r from-blue-500 to-indigo-500 text-white py-2 px-4 rounded-lg flex items-center space-x-2 hover:opacity-90 transition"
+        >
+          <Plus className="w-4 h-4" />
+          <span>New Chat</span>
+        </button>
+
+        <div className="flex-1 overflow-y-auto">
+          {sessions.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => setActiveSessionId(s.id)}
+              className={`w-full text-left px-4 py-2 hover:bg-blue-100 ${
+                s.id === activeSessionId
+                  ? "bg-blue-200 font-semibold"
+                  : "text-gray-700"
+              }`}
+            >
+              {s.title}
+            </button>
+          ))}
+        </div>
+      </aside>
+
+      {/* Chat Area */}
+      <div className="flex-1 flex flex-col">
+        <header className="bg-white/80 backdrop-blur-lg border-b border-blue-100 px-6 py-4 sticky top-0 z-10">
           <div className="flex items-center space-x-3">
             <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-2 rounded-lg">
               <Sparkles className="w-6 h-6 text-white" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                AI Assistant
-              </h1>
-              <p className="text-sm text-gray-500">Always here to help</p>
-            </div>
+            <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              AI Assistant
+            </h1>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Chat Container */}
-      <div className="flex-1 overflow-y-auto px-4 py-6">
-        <div className="max-w-3xl mx-auto space-y-6">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex items-start space-x-3 animate-fade-in ${
-                message.sender === 'user' ? 'flex-row-reverse space-x-reverse' : ''
-              }`}
-            >
-              <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center shadow-sm ${
-                message.sender === 'bot' 
-                  ? 'bg-gradient-to-r from-blue-500 to-indigo-500' 
-                  : 'bg-gradient-to-r from-gray-200 to-gray-300'
-              }`}>
-                {message.sender === 'bot' ? 
-                  <Bot className="w-6 h-6 text-white" /> : 
-                  <User className="w-6 h-6 text-gray-600" />
-                }
-              </div>
-              <div className={`flex flex-col ${
-                message.sender === 'user' ? 'items-end' : 'items-start'
-              }`}>
-                <div className={`rounded-2xl px-5 py-3 max-w-md shadow-sm
-                  ${message.error 
-                    ? 'bg-red-50 border border-red-100 text-red-600'
-                    : message.sender === 'bot'
-                      ? 'bg-white border border-blue-100' 
-                      : 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white'
-                  } transform transition-all duration-200 hover:shadow-md hover:-translate-y-0.5`}
+        <div className="flex-1 overflow-y-auto px-4 py-6">
+          <div className="max-w-3xl mx-auto space-y-6">
+            {activeSession.messages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex items-start space-x-3 animate-fade-in ${
+                  message.sender === "user"
+                    ? "flex-row-reverse space-x-reverse"
+                    : ""
+                }`}
+              >
+                <div
+                  className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center shadow-sm ${
+                    message.sender === "bot"
+                      ? "bg-gradient-to-r from-blue-500 to-indigo-500"
+                      : "bg-gradient-to-r from-gray-200 to-gray-300"
+                  }`}
                 >
-                  {message.error && (
-                    <div className="flex items-center space-x-2 mb-2">
-                      <AlertCircle className="w-4 h-4 text-red-500" />
-                      <span className="text-xs font-medium text-red-500">Error</span>
-                    </div>
+                  {message.sender === "bot" ? (
+                    <Bot className="w-6 h-6 text-white" />
+                  ) : (
+                    <User className="w-6 h-6 text-gray-600" />
                   )}
-                  <div className={`prose prose-sm max-w-none ${
-                    message.sender === 'user' ? 'text-white prose-invert' : 'text-gray-800'
-                  }`}>
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={MarkdownComponents}
+                </div>
+
+                <div
+                  className={`flex flex-col ${
+                    message.sender === "user" ? "items-end" : "items-start"
+                  }`}
+                >
+                  <div
+                    className={`rounded-2xl px-5 py-3 max-w-md shadow-sm
+                    ${
+                      message.error
+                        ? "bg-red-50 border border-red-100 text-red-600"
+                        : message.sender === "bot"
+                        ? "bg-white border border-blue-100"
+                        : "bg-gradient-to-r from-blue-500 to-indigo-500 text-white"
+                    } transform transition-all duration-200 hover:shadow-md hover:-translate-y-0.5`}
+                  >
+                    {message.error && (
+                      <div className="flex items-center space-x-2 mb-2">
+                        <AlertCircle className="w-4 h-4 text-red-500" />
+                        <span className="text-xs font-medium text-red-500">
+                          Error
+                        </span>
+                      </div>
+                    )}
+                    <div
+                      className={`prose prose-sm max-w-none ${
+                        message.sender === "user"
+                          ? "text-white prose-invert"
+                          : "text-gray-800"
+                      }`}
                     >
-                      {message.text}
-                    </ReactMarkdown>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={MarkdownComponents}
+                      >
+                        {message.text}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                  <span className="text-xs text-gray-400 mt-2 mx-2">
+                    {message.timestamp.toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+              </div>
+            ))}
+            {isTyping && (
+              <div className="flex items-center space-x-3">
+                <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-gradient-to-r from-blue-500 to-indigo-500">
+                  <Bot className="w-6 h-6 text-white" />
+                </div>
+                <div className="bg-white rounded-2xl px-5 py-3 shadow-sm border border-blue-100">
+                  <div className="flex space-x-2">
+                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" />
+                    <div
+                      className="w-2 h-2 rounded-full bg-blue-500 animate-bounce"
+                      style={{ animationDelay: "150ms" }}
+                    />
+                    <div
+                      className="w-2 h-2 rounded-full bg-blue-500 animate-bounce"
+                      style={{ animationDelay: "300ms" }}
+                    />
                   </div>
                 </div>
-                <span className="text-xs text-gray-400 mt-2 mx-2">
-                  {message.timestamp.toLocaleTimeString([], { 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                  })}
-                </span>
               </div>
-            </div>
-          ))}
-          {isTyping && (
-            <div className="flex items-center space-x-3">
-              <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-gradient-to-r from-blue-500 to-indigo-500">
-                <Bot className="w-6 h-6 text-white" />
-              </div>
-              <div className="bg-white rounded-2xl px-5 py-3 shadow-sm border border-blue-100">
-                <div className="flex space-x-2">
-                  <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '300ms' }} />
-                </div>
-              </div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-      </div>
-
-      {/* Input Area */}
-      <div className="bg-white/80 backdrop-blur-lg border-t border-blue-100">
-        <div className="max-w-3xl mx-auto px-4 py-4">
-          <form onSubmit={handleSendMessage} className="space-y-2">
-            <div className="relative">
-              <input
-                type="text"
-                value={inputMessage}
-                onChange={handleInputChange}
-                placeholder="Type your message..."
-                className={`w-full rounded-xl border px-5 py-3 pr-20
-                  focus:outline-none focus:ring-2 focus:ring-blue-100
-                  bg-white/50 backdrop-blur-sm transition-all duration-200
-                  ${error ? 'border-red-300 focus:border-red-400' : 'border-blue-100 focus:border-blue-300'}
-                `}
-              />
-              <span className={`absolute right-4 top-1/2 -translate-y-1/2 text-xs
-                ${isOverCharacterLimit ? 'text-red-500 font-medium' : 'text-gray-400'}
-              `}>
-                {getCharacterCount()}
-              </span>
-            </div>
-            
-            {error && (
-              <p className="text-red-500 text-sm flex items-center space-x-1">
-                <AlertCircle className="w-4 h-4" />
-                <span>{error}</span>
-              </p>
             )}
+            <div ref={messagesEndRef} />
+          </div>
+        </div>
 
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={!inputMessage.trim() || isTyping || isOverCharacterLimit}
-                className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-xl px-6 py-3 
-                  flex items-center space-x-2 hover:shadow-lg hover:opacity-90 transition-all duration-200
-                  disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
-              >
-                <span className="hidden sm:inline font-medium">
-                  {isTyping ? 'Sending...' : 'Send'}
-                </span>
-                <Send className="w-4 h-4" />
-              </button>
-            </div>
-          </form>
+        {/* Input Area */}
+        <div className="bg-white/80 backdrop-blur-lg border-t border-blue-100">
+          <div className="max-w-3xl mx-auto px-4 py-4">
+            <form onSubmit={handleSendMessage} className="space-y-2">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={inputMessage}
+                  onChange={handleInputChange}
+                  placeholder="Type your message..."
+                  className={`w-full rounded-xl border px-5 py-3 pr-20
+                    focus:outline-none focus:ring-2 focus:ring-blue-100
+                    bg-white/50 backdrop-blur-sm transition-all duration-200
+                    ${
+                      error
+                        ? "border-red-300 focus:border-red-400"
+                        : "border-blue-100 focus:border-blue-300"
+                    }
+                  `}
+                />
+              </div>
+
+              {error && (
+                <p className="text-red-500 text-sm flex items-center space-x-1">
+                  <AlertCircle className="w-4 h-4" />
+                  <span>{error}</span>
+                </p>
+              )}
+
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={!inputMessage.trim() || isTyping}
+                  className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-xl px-6 py-3 
+                    flex items-center space-x-2 hover:shadow-lg hover:opacity-90 transition-all duration-200
+                    disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
+                >
+                  <span className="hidden sm:inline font-medium">
+                    {isTyping ? "Sending..." : "Send"}
+                  </span>
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
     </div>
