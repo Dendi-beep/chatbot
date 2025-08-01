@@ -1,5 +1,14 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Sparkles, AlertCircle, Plus } from "lucide-react";
+import {
+  Send,
+  Bot,
+  User,
+  Sparkles,
+  AlertCircle,
+  Plus,
+  Menu,
+  X,
+} from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import OpenAI from "openai";
@@ -28,7 +37,7 @@ function App() {
       messages: [
         {
           id: 1,
-          text: "Hallo ! Saya Chatbot. Apa yang bisa saya bantu 👋",
+          text: "Hallo ! Saya AI asisten. Apa yang bisa saya bantu 👋",
           sender: "bot",
           timestamp: new Date(),
         },
@@ -40,6 +49,7 @@ function App() {
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId)!;
 
@@ -230,12 +240,45 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white/80 backdrop-blur-lg border-r border-blue-100 flex flex-col">
+    <div className="flex flex-col md:flex-row h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
+      {/* Mobile Header with Menu Button */}
+      <header className="md:hidden bg-white/80 backdrop-blur-lg border-b border-blue-100 px-4 py-3 sticky top-0 z-20 flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-2 rounded-lg">
+            <Sparkles className="w-5 h-5 text-white" />
+          </div>
+          <h1 className="text-lg font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+            AI Assistant
+          </h1>
+        </div>
+        <button
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          className="p-2 rounded-lg hover:bg-blue-100"
+        >
+          <Menu className="w-5 h-5 text-gray-600" />
+        </button>
+      </header>
+
+      {/* Sidebar - Hidden on mobile by default */}
+      <aside
+        className={`${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} 
+    md:translate-x-0 w-3/4 md:w-64 bg-white/80 backdrop-blur-lg border-r border-blue-100 
+    flex flex-col fixed inset-y-0 left-0 z-10 md:z-auto md:relative 
+    transition-transform duration-300 ease-in-out`}
+      >
+        <div className="flex items-center justify-between p-4 border-b border-blue-100 md:hidden">
+          <h2 className="text-lg font-semibold text-gray-700">Conversations</h2>
+          <button
+            onClick={() => setIsSidebarOpen(false)}
+            className="p-2 rounded-lg hover:bg-blue-100"
+          >
+            <X className="w-5 h-5 text-gray-600" />
+          </button>
+        </div>
+
         <button
           onClick={createNewSession}
-          className="m-4 bg-gradient-to-r from-blue-500 to-indigo-500 text-white py-2 px-4 rounded-lg flex items-center space-x-2 hover:opacity-90 transition"
+          className="m-4 bg-gradient-to-r from-blue-500 to-indigo-500 text-white py-2 px-4 rounded-lg flex items-center space-x-2 hover:opacity-90 transition text-sm md:text-base"
         >
           <Plus className="w-4 h-4" />
           <span>New Chat</span>
@@ -252,8 +295,11 @@ function App() {
               }`}
             >
               <button
-                onClick={() => setActiveSessionId(s.id)}
-                className="flex-1 text-left truncate"
+                onClick={() => {
+                  setActiveSessionId(s.id);
+                  setIsSidebarOpen(false);
+                }}
+                className="flex-1 text-left truncate text-sm md:text-base"
               >
                 {s.title}
               </button>
@@ -270,9 +316,18 @@ function App() {
         </div>
       </aside>
 
+      {/* Overlay for mobile sidebar */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-0 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       {/* Chat Area */}
       <div className="flex-1 flex flex-col">
-        <header className="bg-white/80 backdrop-blur-lg border-b border-blue-100 px-6 py-4 sticky top-0 z-10">
+        {/* Desktop Header */}
+        <header className="hidden md:flex bg-white/80 backdrop-blur-lg border-b border-blue-100 px-6 py-4 sticky top-0 z-10">
           <div className="flex items-center space-x-3">
             <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-2 rounded-lg">
               <Sparkles className="w-6 h-6 text-white" />
@@ -295,16 +350,16 @@ function App() {
                 }`}
               >
                 <div
-                  className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center shadow-sm ${
+                  className={`flex-shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center shadow-sm ${
                     message.sender === "bot"
                       ? "bg-gradient-to-r from-blue-500 to-indigo-500"
                       : "bg-gradient-to-r from-gray-200 to-gray-300"
                   }`}
                 >
                   {message.sender === "bot" ? (
-                    <Bot className="w-6 h-6 text-white" />
+                    <Bot className="w-4 h-4 md:w-6 md:h-6 text-white" />
                   ) : (
-                    <User className="w-6 h-6 text-gray-600" />
+                    <User className="w-4 h-4 md:w-6 md:h-6 text-gray-600" />
                   )}
                 </div>
 
@@ -314,14 +369,14 @@ function App() {
                   }`}
                 >
                   <div
-                    className={`rounded-2xl px-5 py-3 max-w-md shadow-sm
-                    ${
-                      message.error
-                        ? "bg-red-50 border border-red-100 text-red-600"
-                        : message.sender === "bot"
-                        ? "bg-white border border-blue-100"
-                        : "bg-gradient-to-r from-blue-500 to-indigo-500 text-white"
-                    } transform transition-all duration-200 hover:shadow-md hover:-translate-y-0.5`}
+                    className={`rounded-2xl px-4 py-2 md:px-5 md:py-3 max-w-xs md:max-w-md shadow-sm
+                  ${
+                    message.error
+                      ? "bg-red-50 border border-red-100 text-red-600"
+                      : message.sender === "bot"
+                      ? "bg-white border border-blue-100"
+                      : "bg-gradient-to-r from-blue-500 to-indigo-500 text-white"
+                  } transform transition-all duration-200 hover:shadow-md hover:-translate-y-0.5`}
                   >
                     {message.error && (
                       <div className="flex items-center space-x-2 mb-2">
@@ -346,7 +401,7 @@ function App() {
                       </ReactMarkdown>
                     </div>
                   </div>
-                  <span className="text-xs text-gray-400 mt-2 mx-2">
+                  <span className="text-xs text-gray-400 mt-1 mx-1 md:mt-2 md:mx-2">
                     {message.timestamp.toLocaleTimeString([], {
                       hour: "2-digit",
                       minute: "2-digit",
@@ -357,18 +412,18 @@ function App() {
             ))}
             {isTyping && (
               <div className="flex items-center space-x-3">
-                <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-gradient-to-r from-blue-500 to-indigo-500">
-                  <Bot className="w-6 h-6 text-white" />
+                <div className="flex-shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center bg-gradient-to-r from-blue-500 to-indigo-500">
+                  <Bot className="w-4 h-4 md:w-6 md:h-6 text-white" />
                 </div>
-                <div className="bg-white rounded-2xl px-5 py-3 shadow-sm border border-blue-100">
+                <div className="bg-white rounded-2xl px-4 py-2 md:px-5 md:py-3 shadow-sm border border-blue-100">
                   <div className="flex space-x-2">
-                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" />
+                    <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-blue-500 animate-bounce" />
                     <div
-                      className="w-2 h-2 rounded-full bg-blue-500 animate-bounce"
+                      className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-blue-500 animate-bounce"
                       style={{ animationDelay: "150ms" }}
                     />
                     <div
-                      className="w-2 h-2 rounded-full bg-blue-500 animate-bounce"
+                      className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-blue-500 animate-bounce"
                       style={{ animationDelay: "300ms" }}
                     />
                   </div>
@@ -380,7 +435,7 @@ function App() {
         </div>
 
         {/* Input Area */}
-        <div className="bg-white/80 backdrop-blur-lg border-t border-blue-100">
+        <div className="bg-white/80 backdrop-blur-lg border-t border-blue-100 pb-4 md:pb-0">
           <div className="max-w-3xl mx-auto px-4 py-4">
             <form onSubmit={handleSendMessage} className="space-y-2">
               <div className="relative">
@@ -389,16 +444,24 @@ function App() {
                   value={inputMessage}
                   onChange={handleInputChange}
                   placeholder="Type your message..."
-                  className={`w-full rounded-xl border px-5 py-3 pr-20
-                    focus:outline-none focus:ring-2 focus:ring-blue-100
-                    bg-white/50 backdrop-blur-sm transition-all duration-200
-                    ${
-                      error
-                        ? "border-red-300 focus:border-red-400"
-                        : "border-blue-100 focus:border-blue-300"
-                    }
-                  `}
+                  className={`w-full rounded-xl border px-4 py-2 md:px-5 md:py-3 pr-16
+                  focus:outline-none focus:ring-2 focus:ring-blue-100
+                  bg-white/50 backdrop-blur-sm transition-all duration-200
+                  ${
+                    error
+                      ? "border-red-300 focus:border-red-400"
+                      : "border-blue-100 focus:border-blue-300"
+                  }
+                `}
                 />
+                <button
+                  type="submit"
+                  disabled={!inputMessage.trim() || isTyping}
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-lg p-1.5 md:p-2
+                  disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
               </div>
 
               {error && (
@@ -407,21 +470,6 @@ function App() {
                   <span>{error}</span>
                 </p>
               )}
-
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  disabled={!inputMessage.trim() || isTyping}
-                  className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-xl px-6 py-3 
-                    flex items-center space-x-2 hover:shadow-lg hover:opacity-90 transition-all duration-200
-                    disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
-                >
-                  <span className="hidden sm:inline font-medium">
-                    {isTyping ? "Sending..." : "Send"}
-                  </span>
-                  <Send className="w-4 h-4" />
-                </button>
-              </div>
             </form>
           </div>
         </div>
