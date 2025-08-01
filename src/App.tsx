@@ -66,6 +66,19 @@ function App() {
     }
   }, []);
 
+  const deleteSession = (id: string) => {
+    setSessions((prev) => {
+      const filtered = prev.filter((s) => s.id !== id);
+
+      // kalau session yang dihapus adalah yang aktif
+      if (id === activeSessionId) {
+        setActiveSessionId(filtered[0]?.id || "default");
+      }
+
+      return filtered;
+    });
+  };
+
   // Simpan sessions ke localStorage setiap kali berubah
   useEffect(() => {
     localStorage.setItem("chat-sessions", JSON.stringify(sessions));
@@ -230,17 +243,29 @@ function App() {
 
         <div className="flex-1 overflow-y-auto">
           {sessions.map((s) => (
-            <button
+            <div
               key={s.id}
-              onClick={() => setActiveSessionId(s.id)}
-              className={`w-full text-left px-4 py-2 hover:bg-blue-100 ${
+              className={`flex items-center justify-between px-4 py-2 hover:bg-blue-100 ${
                 s.id === activeSessionId
                   ? "bg-blue-200 font-semibold"
                   : "text-gray-700"
               }`}
             >
-              {s.title}
-            </button>
+              <button
+                onClick={() => setActiveSessionId(s.id)}
+                className="flex-1 text-left truncate"
+              >
+                {s.title}
+              </button>
+              {s.id !== "default" && (
+                <button
+                  onClick={() => deleteSession(s.id)}
+                  className="ml-2 text-red-500 hover:text-red-700"
+                >
+                  ✖
+                </button>
+              )}
+            </div>
           ))}
         </div>
       </aside>
