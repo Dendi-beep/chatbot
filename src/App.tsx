@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { Send, Bot, User, Sparkles, AlertCircle, Plus } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-
+import OpenAI from "openai";
 interface Message {
   id: number;
   text: string;
@@ -61,34 +61,19 @@ function App() {
     }
   };
 
-  const sendMessageToAPI = async (text: string) => {
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({
-          model: "deepseek/deepseek-chat-v3-0324",
-          messages: [{ role: "user", content: text }],
-          temperature: 0.7,
-        }),
-      });
+  const client = new OpenAI({
+    apiKey: import.meta.env.VITE_OPENROUTER_KEY,
+    baseURL: "https://openrouter.ai/api/v1",
+    dangerouslyAllowBrowser: true,
+  });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      return await response.json();
-    } catch (err) {
-      console.error("Fetch error:", err);
-      return {
-        text: `Error: ${err}`,
-        error: true,
-      };
-    }
-  };
+  async function sendMessageToAPI(text: string) {
+    const res = await client.chat.completions.create({
+      model: "deepseek/deepseek-chat-v3-0324",
+      messages: [{ role: "user", content: text }],
+    });
+    return res.choices[0].message.content;
+  }
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
