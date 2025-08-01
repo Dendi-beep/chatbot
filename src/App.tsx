@@ -62,14 +62,17 @@ function App() {
   };
 
   const sendMessageToAPI = async (text: string) => {
-    const response = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "deepseek/deepseek-chat-v3-0324",
-        messages: [{ role: "user", content: text }],
-      }),
-    });
+    const response = await fetch(
+      "https://chatbot-rosy-mu.vercel.app/api/chat",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "deepseek/deepseek-chat-v3-0324",
+          messages: [{ role: "user", content: text }],
+        }),
+      }
+    );
 
     if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
     const data = await response.json();
