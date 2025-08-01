@@ -69,7 +69,7 @@ function App() {
 
   async function sendMessageToAPI(text: string) {
     const res = await client.chat.completions.create({
-      model: "deepseek/deepseek-chat-v3-0324",
+      model: "deepseek/deepseek-chat-v3-0324:free",
       messages: [{ role: "user", content: text }],
     });
     return res.choices[0].message.content;
