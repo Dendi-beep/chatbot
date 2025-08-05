@@ -1,16 +1,31 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import "highlight.js/styles/github-dark.css";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   Send,
   Bot,
   User,
-  Sparkles,
   AlertCircle,
   Plus,
   Menu,
+  Copy,
+  Check,
   X,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
 import OpenAI from "openai";
 
 interface Message {
@@ -29,84 +44,58 @@ interface Session {
 
 const MAX_MESSAGE_LENGTH = 1000;
 
-function App() {
-  const [sessions, setSessions] = useState<Session[]>([
-    {
-      id: "default",
-      title: "New Chat",
-      messages: [
+export default function App() {
+  const [sessions, setSessions] = useState<Session[]>(() => {
+    const saved = localStorage.getItem("chat-sessions");
+    if (!saved)
+      return [
         {
-          id: 1,
-          text: "Hallo ! Saya AI asisten. Apa yang bisa saya bantu 👋",
-          sender: "bot",
-          timestamp: new Date(),
+          id: "default",
+          title: "New Chat",
+          messages: [
+            {
+              id: 1,
+              text: "Hallo ! Saya AI asisten. Apa yang bisa saya bantu 👋",
+              sender: "bot",
+              timestamp: new Date(),
+            },
+          ],
         },
-      ],
-    },
-  ]);
-  const [activeSessionId, setActiveSessionId] = useState("default");
+      ];
+    return JSON.parse(saved, (key, value) =>
+      key === "timestamp" ? new Date(value) : value
+    );
+  });
+
+  const [activeSessionId, setActiveSessionId] = useState(
+    () => localStorage.getItem("active-session") || "default"
+  );
   const [inputMessage, setInputMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId)!;
 
   const client = new OpenAI({
     apiKey: import.meta.env.VITE_OPENROUTER_API_KEY,
     baseURL: "https://openrouter.ai/api/v1",
-    dangerouslyAllowBrowser: true, // untuk FE only
+    dangerouslyAllowBrowser: true,
   });
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  // Load sessions from localStorage saat app start
   useEffect(() => {
-    const saved = localStorage.getItem("chat-sessions");
-    if (saved) {
-      setSessions(
-        JSON.parse(saved, (key, value) => {
-          if (key === "timestamp") return new Date(value);
-          return value;
-        })
-      );
-    }
-  }, []);
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [activeSession.messages, isTyping]);
 
-  const deleteSession = (id: string) => {
-    setSessions((prev) => {
-      const filtered = prev.filter((s) => s.id !== id);
-
-      // kalau session yang dihapus adalah yang aktif
-      if (id === activeSessionId) {
-        setActiveSessionId(filtered[0]?.id || "default");
-      }
-
-      return filtered;
-    });
-  };
-
-  // Simpan sessions ke localStorage setiap kali berubah
   useEffect(() => {
     localStorage.setItem("chat-sessions", JSON.stringify(sessions));
-  }, [sessions]);
+    localStorage.setItem("active-session", activeSessionId);
+  }, [sessions, activeSessionId]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const text = e.target.value;
-    if (text.length <= MAX_MESSAGE_LENGTH) {
-      setInputMessage(text);
-      setError(null);
-    } else {
-      setError(`Message cannot exceed ${MAX_MESSAGE_LENGTH} characters`);
-    }
-  };
-
-  // Kirim ke API + seluruh history biar AI ingat konteks
   const sendMessageToAPI = async (text: string) => {
-    // Ambil semua pesan sebelumnya sebagai context
     const messagesToSend = [
       {
         role: "system",
@@ -114,7 +103,8 @@ function App() {
           "Kamu adalah AI asisten di website ini. " +
           "Jika pengguna bertanya tentang website atau tentang AI ini, " +
           "jawablah bahwa website ini menggunakan model seperti GPT-4 " +
-          "dan dikembangkan oleh Dendi Ananda Putra.",
+          "dan dikembangkan oleh Dendi Ananda Putra." +
+          "Jawablah dengan ramah",
       },
       ...activeSession.messages.map((m) => ({
         role: m.sender === "user" ? "user" : "assistant",
@@ -127,7 +117,6 @@ function App() {
       model: "deepseek/deepseek-chat-v3-0324:free",
       messages: messagesToSend,
     });
-
     return (
       res.choices[0].message?.content || "I couldn't process your request."
     );
@@ -145,38 +134,32 @@ function App() {
     };
 
     setSessions((prev) =>
-      prev.map((s) => {
-        if (s.id === activeSessionId) {
-          const updatedMessages = [...s.messages, newMessage];
-          return {
-            ...s,
-            messages: updatedMessages,
-            // Update title kalau ini pesan user pertama
-            title:
-              s.messages.filter((m) => m.sender === "user").length === 0
-                ? inputMessage.slice(0, 20) +
-                  (inputMessage.length > 20 ? "..." : "")
-                : s.title,
-          };
-        }
-        return s;
-      })
+      prev.map((s) =>
+        s.id === activeSessionId
+          ? {
+              ...s,
+              messages: [...s.messages, newMessage],
+              title:
+                s.messages.filter((m) => m.sender === "user").length === 0
+                  ? inputMessage.slice(0, 20) +
+                    (inputMessage.length > 20 ? "..." : "")
+                  : s.title,
+            }
+          : s
+      )
     );
 
     setInputMessage("");
     setIsTyping(true);
-    setError(null);
 
     try {
       const botReply = await sendMessageToAPI(inputMessage);
-
       const botMessage: Message = {
         id: newMessage.id + 1,
         text: botReply,
         sender: "bot",
         timestamp: new Date(),
       };
-
       setSessions((prev) =>
         prev.map((s) =>
           s.id === activeSessionId
@@ -185,7 +168,7 @@ function App() {
         )
       );
     } catch {
-      const errorMessage: Message = {
+      const errorMsg: Message = {
         id: newMessage.id + 1,
         text: "I encountered an error. Please try again later.",
         sender: "bot",
@@ -195,7 +178,7 @@ function App() {
       setSessions((prev) =>
         prev.map((s) =>
           s.id === activeSessionId
-            ? { ...s, messages: [...s.messages, errorMessage] }
+            ? { ...s, messages: [...s.messages, errorMsg] }
             : s
         )
       );
@@ -212,7 +195,7 @@ function App() {
       messages: [
         {
           id: 1,
-          text: "Hello! I'm your AI assistant. How can I help you today? 👋",
+          text: "Hello! Saya AI asisten. Apa yang bisa saya bantu 👋",
           sender: "bot",
           timestamp: new Date(),
         },
@@ -222,260 +205,327 @@ function App() {
     setActiveSessionId(newId);
   };
 
+  const deleteSession = (id: string) => {
+    setSessions((prev) => {
+      const filtered = prev.filter((s) => s.id !== id);
+      if (id === activeSessionId) {
+        setActiveSessionId(filtered[0]?.id || "default");
+      }
+      return filtered;
+    });
+  };
+
+  const startRename = (session: Session) => {
+    setEditingSessionId(session.id);
+    setEditingTitle(session.title);
+  };
+
+  const handleRename = (id: string) => {
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === id ? { ...s, title: editingTitle || "Untitled" } : s
+      )
+    );
+    setEditingSessionId(null);
+  };
+
+  const SidebarContent = (
+    <div className="flex flex-col h-full bg-white text-gray-900">
+      {/* Header */}
+      <div className="p-2">
+        <Button
+          onClick={createNewSession}
+          className="w-full justify-start bg-black hover:bg-black/80 text-white"
+          size={isCollapsed ? "icon" : "default"}
+        >
+          <Plus className="w-4 h-4" />
+          {!isCollapsed && <span className="ml-2">New Chat</span>}
+        </Button>
+      </div>
+
+      {/* Chat Sessions */}
+      <ScrollArea className="flex-1 px-2 space-y-1">
+        {sessions.map((s) => (
+          <div
+            key={s.id}
+            className={cn(
+              "flex items-center rounded-md hover:bg-gray-200 group cursor-pointer px-2 py-2 transition",
+              s.id === activeSessionId ? "bg-gray-200" : ""
+            )}
+          >
+            {isCollapsed ? (
+              <Avatar
+                onClick={() => setActiveSessionId(s.id)}
+                className="h-8 w-8 bg-gray-300 text-gray-800"
+              >
+                <AvatarFallback>{s.title.charAt(0)}</AvatarFallback>
+              </Avatar>
+            ) : editingSessionId === s.id ? (
+              <Input
+                value={editingTitle}
+                onChange={(e) => setEditingTitle(e.target.value)}
+                onBlur={() => handleRename(s.id)}
+                onKeyDown={(e) => e.key === "Enter" && handleRename(s.id)}
+                autoFocus
+                className="flex-1 mr-2 bg-gray-100 text-gray-900 border-gray-300"
+              />
+            ) : (
+              <div
+                onClick={() => setActiveSessionId(s.id)}
+                className="flex-1 truncate text-sm"
+              >
+                {s.title}
+              </div>
+            )}
+
+            {!isCollapsed && s.id !== "default" && (
+              <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => startRename(s)}
+                  className="h-6 w-6 text-gray-500 hover:text-gray-700"
+                >
+                  ✏️
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => deleteSession(s.id)}
+                  className="h-6 w-6 text-gray-500 hover:text-red-500"
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+            )}
+          </div>
+        ))}
+      </ScrollArea>
+
+      {/* Footer */}
+      <div className="p-2 border-t border-gray-200 flex justify-between items-center">
+        {!isCollapsed && (
+          <span className="text-xs text-gray-400">© 2025 AI</span>
+        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-gray-400 hover:text-gray-600"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+        >
+          {isCollapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+        </Button>
+      </div>
+    </div>
+  );
+
   const MarkdownComponents = {
-    code({ inline, className, children, ...props }: any) {
-      return inline ? (
-        <code className="bg-gray-100 text-sm px-1 py-0.5 rounded">
-          {children}
-        </code>
-      ) : (
-        <pre className="bg-gray-900 text-green-200 p-3 rounded-lg overflow-x-auto text-sm whitespace-pre-wrap">
-          <code {...props}>{children}</code>
-        </pre>
+    code({
+      inline,
+      className,
+      children,
+      ...props
+    }: {
+      inline?: boolean;
+      className?: string;
+      children?: React.ReactNode;
+    }) {
+      const text = String(children);
+      const codeId = Math.random().toString(36).substring(2);
+
+      // Inline code
+      if (inline) {
+        return (
+          <code className="bg-gray-100 text-sm px-1 py-0.5 rounded">
+            {children}
+          </code>
+        );
+      }
+
+      // Block code
+      return (
+        <div className="relative group my-2">
+          <pre className="bg-gray-900 text-green-200 p-3 rounded-lg overflow-x-auto text-sm whitespace-pre-wrap">
+            <code {...props}>{children}</code>
+          </pre>
+          <Button
+            variant="secondary"
+            size="icon"
+            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition"
+            onClick={() => {
+              navigator.clipboard.writeText(text);
+              setCopied(codeId);
+              setTimeout(() => setCopied(null), 1500);
+            }}
+          >
+            {copied === codeId ? (
+              <Check className="w-4 h-4" />
+            ) : (
+              <Copy className="w-4 h-4" />
+            )}
+          </Button>
+        </div>
       );
     },
+
     p({ children }: any) {
-      return <p className="mb-2 whitespace-pre-wrap">{children}</p>;
+      const hasBlockChild = React.Children.toArray(children).some(
+        (child: any) =>
+          React.isValidElement(child) &&
+          ["div", "pre"].includes(child.type as string)
+      );
+
+      return hasBlockChild ? (
+        <div className="mb-2 whitespace-pre-wrap">{children}</div>
+      ) : (
+        <p className="mb-2 whitespace-pre-wrap">{children}</p>
+      );
     },
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
-      {/* Mobile Header with Menu Button */}
-      <header className="md:hidden bg-white/80 backdrop-blur-lg border-b border-blue-100 px-4 py-3 sticky top-0 z-20 flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-2 rounded-lg">
-            <Sparkles className="w-5 h-5 text-white" />
-          </div>
-          <h1 className="text-lg font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-            AI Assistant
-          </h1>
-        </div>
-        <button
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="p-2 rounded-lg hover:bg-blue-100"
-        >
-          <Menu className="w-5 h-5 text-gray-600" />
-        </button>
-      </header>
-
-      {/* Sidebar - Hidden on mobile by default */}
-      <aside
-        className={`${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} 
-    md:translate-x-0 w-3/4 md:w-64 bg-white/80 backdrop-blur-lg border-r border-blue-100 
-    flex flex-col fixed inset-y-0 left-0 z-10 md:z-auto md:relative 
-    transition-transform duration-300 ease-in-out`}
-      >
-        <div className="flex items-center justify-between p-4 border-b border-blue-100 md:hidden">
-          <h2 className="text-lg font-semibold text-gray-700">Conversations</h2>
-          <button
-            onClick={() => setIsSidebarOpen(false)}
-            className="p-2 rounded-lg hover:bg-blue-100"
-          >
-            <X className="w-5 h-5 text-gray-600" />
-          </button>
-        </div>
-
-        <button
-          onClick={createNewSession}
-          className="m-4 bg-gradient-to-r from-blue-500 to-indigo-500 text-white py-2 px-4 rounded-lg flex items-center space-x-2 hover:opacity-90 transition text-sm md:text-base"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Chat</span>
-        </button>
-
-        <div className="flex-1 overflow-y-auto">
-          {sessions.map((s) => (
-            <div
-              key={s.id}
-              className={`flex items-center justify-between px-4 py-2 hover:bg-blue-100 ${
-                s.id === activeSessionId
-                  ? "bg-blue-200 font-semibold"
-                  : "text-gray-700"
-              }`}
-            >
-              <button
-                onClick={() => {
-                  setActiveSessionId(s.id);
-                  setIsSidebarOpen(false);
-                }}
-                className="flex-1 text-left truncate text-sm md:text-base"
-              >
-                {s.title}
-              </button>
-              {s.id !== "default" && (
-                <button
-                  onClick={() => deleteSession(s.id)}
-                  className="ml-2 text-red-500 hover:text-red-700"
-                >
-                  ✖
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      </aside>
-
-      {/* Overlay for mobile sidebar */}
-      {isSidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-0 md:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        />
-      )}
-
-      {/* Chat Area */}
-      <div className="flex-1 flex flex-col">
-        {/* Desktop Header */}
-        <header className="hidden md:flex bg-white/80 backdrop-blur-lg border-b border-blue-100 px-6 py-4 sticky top-0 z-10">
-          <div className="flex items-center space-x-3">
-            <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-2 rounded-lg">
-              <Sparkles className="w-6 h-6 text-white" />
-            </div>
-            <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              AI Assistant
-            </h1>
-          </div>
-        </header>
-
-        <div className="flex-1 overflow-y-auto px-4 py-6">
-          <div className="max-w-3xl mx-auto space-y-6">
-            {activeSession.messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex items-start space-x-3 animate-fade-in ${
-                  message.sender === "user"
-                    ? "flex-row-reverse space-x-reverse"
-                    : ""
-                }`}
-              >
-                <div
-                  className={`flex-shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center shadow-sm ${
-                    message.sender === "bot"
-                      ? "bg-gradient-to-r from-blue-500 to-indigo-500"
-                      : "bg-gradient-to-r from-gray-200 to-gray-300"
-                  }`}
-                >
-                  {message.sender === "bot" ? (
-                    <Bot className="w-4 h-4 md:w-6 md:h-6 text-white" />
-                  ) : (
-                    <User className="w-4 h-4 md:w-6 md:h-6 text-gray-600" />
-                  )}
-                </div>
-
-                <div
-                  className={`flex flex-col ${
-                    message.sender === "user" ? "items-end" : "items-start"
-                  }`}
-                >
-                  <div
-                    className={`rounded-2xl px-4 py-2 md:px-5 md:py-3 max-w-xs md:max-w-md shadow-sm
-                  ${
-                    message.error
-                      ? "bg-red-50 border border-red-100 text-red-600"
-                      : message.sender === "bot"
-                      ? "bg-white border border-blue-100"
-                      : "bg-gradient-to-r from-blue-500 to-indigo-500 text-white"
-                  } transform transition-all duration-200 hover:shadow-md hover:-translate-y-0.5`}
-                  >
-                    {message.error && (
-                      <div className="flex items-center space-x-2 mb-2">
-                        <AlertCircle className="w-4 h-4 text-red-500" />
-                        <span className="text-xs font-medium text-red-500">
-                          Error
-                        </span>
-                      </div>
-                    )}
-                    <div
-                      className={`prose prose-sm max-w-none ${
-                        message.sender === "user"
-                          ? "text-white prose-invert"
-                          : "text-gray-800"
-                      }`}
-                    >
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={MarkdownComponents}
-                      >
-                        {message.text}
-                      </ReactMarkdown>
-                    </div>
-                  </div>
-                  <span className="text-xs text-gray-400 mt-1 mx-1 md:mt-2 md:mx-2">
-                    {message.timestamp.toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                </div>
-              </div>
-            ))}
-            {isTyping && (
-              <div className="flex items-center space-x-3">
-                <div className="flex-shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center bg-gradient-to-r from-blue-500 to-indigo-500">
-                  <Bot className="w-4 h-4 md:w-6 md:h-6 text-white" />
-                </div>
-                <div className="bg-white rounded-2xl px-4 py-2 md:px-5 md:py-3 shadow-sm border border-blue-100">
-                  <div className="flex space-x-2">
-                    <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-blue-500 animate-bounce" />
-                    <div
-                      className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-blue-500 animate-bounce"
-                      style={{ animationDelay: "150ms" }}
-                    />
-                    <div
-                      className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-blue-500 animate-bounce"
-                      style={{ animationDelay: "300ms" }}
-                    />
-                  </div>
-                </div>
-              </div>
+    <TooltipProvider>
+      <div className="h-screen bg-background">
+        <ResizablePanelGroup direction="horizontal" className="h-full">
+          {/* Sidebar Desktop */}
+          <ResizablePanel
+            defaultSize={isCollapsed ? 5 : 20}
+            minSize={5}
+            maxSize={30}
+            className={cn(
+              "hidden md:block border-r border-gray-200 transition-all duration-300",
+              isCollapsed ? "min-w-[50px]" : "min-w-[200px]"
             )}
-            <div ref={messagesEndRef} />
-          </div>
-        </div>
+          >
+            {SidebarContent}
+          </ResizablePanel>
 
-        {/* Input Area */}
-        <div className="bg-white/80 backdrop-blur-lg border-t border-blue-100 pb-4 md:pb-0">
-          <div className="max-w-3xl mx-auto px-4 py-4">
-            <form onSubmit={handleSendMessage} className="space-y-2">
-              <div className="relative">
-                <input
-                  type="text"
-                  value={inputMessage}
-                  onChange={handleInputChange}
+          {/* Main Content */}
+          <ResizablePanel defaultSize={80}>
+            <div className="flex flex-col h-full">
+              <CardHeader className="border-b flex items-center justify-center md:justify-between relative px-4 py-3">
+                <CardTitle className="text-center md:text-left truncate max-w-[70%] md:max-w-full">
+                  {activeSession.title}
+                </CardTitle>
+
+                {/* Tombol floating sidebar mobile */}
+                <div className="md:hidden fixed top-4 left-4 z-50">
+                  <Sheet>
+                    <SheetTrigger asChild>
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        className="shadow-lg rounded-full bg-white hover:bg-gray-100"
+                      >
+                        <Menu className="w-5 h-5 text-gray-800" />
+                      </Button>
+                    </SheetTrigger>
+                    <SheetContent side="left" className="p-0 w-[260px]">
+                      {SidebarContent}
+                    </SheetContent>
+                  </Sheet>
+                </div>
+              </CardHeader>
+
+              <ScrollArea className="flex-1 p-4">
+                <div className="max-w-3xl mx-auto space-y-4">
+                  {activeSession.messages.map((message) => (
+                    <div
+                      key={message.id}
+                      className={cn(
+                        "flex gap-3",
+                        message.sender === "user"
+                          ? "justify-end"
+                          : "justify-start"
+                      )}
+                    >
+                      {message.sender === "bot" && (
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className="bg-primary text-primary-foreground">
+                            <Bot className="w-4 h-4" />
+                          </AvatarFallback>
+                        </Avatar>
+                      )}
+                      <Card
+                        className={cn(
+                          "p-4 max-w-[80%]",
+                          message.error
+                            ? "border-destructive bg-destructive/10"
+                            : message.sender === "user"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-background"
+                        )}
+                      >
+                        <CardContent className="p-0">
+                          {message.error && (
+                            <div className="flex items-center space-x-2 mb-2">
+                              <AlertCircle className="w-4 h-4 text-destructive" />
+                              <span className="text-xs font-medium text-destructive">
+                                Error
+                              </span>
+                            </div>
+                          )}
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            rehypePlugins={[rehypeHighlight]}
+                            components={MarkdownComponents}
+                          >
+                            {message.text}
+                          </ReactMarkdown>
+                        </CardContent>
+                      </Card>
+                      {message.sender === "user" && (
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className="bg-primary text-primary-foreground">
+                            <User className="w-4 h-4" />
+                          </AvatarFallback>
+                        </Avatar>
+                      )}
+                    </div>
+                  ))}
+                  {isTyping && (
+                    <div className="flex items-center space-x-2 text-muted-foreground text-sm animate-pulse">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="bg-primary text-primary-foreground">
+                          <Bot className="w-4 h-4" />
+                        </AvatarFallback>
+                      </Avatar>
+                      <Card className="p-3">
+                        <CardContent className="p-0 flex space-x-1">
+                          <span className="animate-bounce">●</span>
+                          <span className="animate-bounce delay-150">●</span>
+                          <span className="animate-bounce delay-300">●</span>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+              </ScrollArea>
+
+              <Separator />
+              <form
+                onSubmit={handleSendMessage}
+                className="p-4 flex space-x-2 max-w-3xl mx-auto w-full"
+              >
+                <Input
                   placeholder="Type your message..."
-                  className={`w-full rounded-xl border px-4 py-2 md:px-5 md:py-3 pr-16
-                  focus:outline-none focus:ring-2 focus:ring-blue-100
-                  bg-white/50 backdrop-blur-sm transition-all duration-200
-                  ${
-                    error
-                      ? "border-red-300 focus:border-red-400"
-                      : "border-blue-100 focus:border-blue-300"
-                  }
-                `}
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  maxLength={MAX_MESSAGE_LENGTH}
                 />
-                <button
+                <Button
                   type="submit"
                   disabled={!inputMessage.trim() || isTyping}
-                  className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-lg p-1.5 md:p-2
-                  disabled:opacity-50 disabled:cursor-not-allowed"
+                  size="icon"
                 >
                   <Send className="w-4 h-4" />
-                </button>
-              </div>
-
-              {error && (
-                <p className="text-red-500 text-sm flex items-center space-x-1">
-                  <AlertCircle className="w-4 h-4" />
-                  <span>{error}</span>
-                </p>
-              )}
-            </form>
-          </div>
-        </div>
+                </Button>
+              </form>
+            </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }
-
-export default App;
