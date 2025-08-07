@@ -42,7 +42,7 @@ interface Session {
   messages: Message[];
 }
 
-const MAX_MESSAGE_LENGTH = 1000;
+const MAX_MESSAGE_LENGTH = 100000;
 
 export default function App() {
   const [sessions, setSessions] = useState<Session[]>(() => {
@@ -409,7 +409,7 @@ export default function App() {
                 </CardTitle>
 
                 {/* Tombol floating sidebar mobile */}
-                <div className="md:hidden fixed top-4 left-4 z-50">
+                <div className="md:hidden fixed top-0 left-4 z-50">
                   <Sheet>
                     <SheetTrigger asChild>
                       <Button
